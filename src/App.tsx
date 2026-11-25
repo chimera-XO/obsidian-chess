@@ -20,6 +20,7 @@ import { useGeminiLive } from './hooks/useGeminiLive';
 import { usePvpRoom } from './hooks/usePvpRoom';
 import { useGameHistory } from './hooks/useGameHistory';
 import { AuthScreen } from './components/AuthScreen';
+import { LoadingScreen } from './components/LoadingScreen';
 import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/HomeView';
 import { PlaySetupFlow } from './components/PlaySetupFlow';
@@ -52,16 +53,25 @@ const SOLVED_PUZZLES_KEY = 'obsidian_chess_solved_puzzles';
 
 export default function App() {
   const auth = useAuth();
+  const [minSplashDone, setMinSplashDone] = useState(false);
+  const [splashVisible, setSplashVisible] = useState(true);
 
-  if (auth.initializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-2.5 text-xs text-zinc-400">
-          <span className="w-2 h-2 rounded-full bg-zinc-300 animate-ping" />
-          Loading Obsidian Chess...
-        </div>
-      </div>
-    );
+  useEffect(() => {
+    const t = window.setTimeout(() => setMinSplashDone(true), 2400);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const isLoading = auth.initializing || !minSplashDone;
+
+  useEffect(() => {
+    if (!isLoading) {
+      const fadeTimer = window.setTimeout(() => setSplashVisible(false), 320);
+      return () => window.clearTimeout(fadeTimer);
+    }
+  }, [isLoading]);
+
+  if (splashVisible) {
+    return <LoadingScreen fadingOut={!isLoading} />;
   }
 
   if (!auth.user) {
