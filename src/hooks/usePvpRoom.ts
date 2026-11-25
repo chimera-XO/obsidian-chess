@@ -28,6 +28,8 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
   const [displayClocks, setDisplayClocks] = useState<{ w: number; b: number }>({ w: 0, b: 0 });
 
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const roomRef = useRef<ChessRoomRow | null>(null);
+  roomRef.current = room;
   const timeoutReportedRef = useRef<boolean>(false);
 
   const myColor: 'w' | 'b' | 'spectator' | null = !room
@@ -48,13 +50,69 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
 
   const isOpponentOnline = Boolean(opponentId && onlinePlayerIds.includes(opponentId));
 
-  useEffect(() => {
-    if (!supabase || !room?.code || !playerId) return;
+  const applyIncomingRoom = useCallback((incoming: ChessRoomRow) => {
+    setRoom((prev) => {
+      if (!prev) return incoming;
+      const prevMoves = prev.moves?.length || 0;
+      const nextMoves = incoming.moves?.length || 0;
+      const sameState =
+        prev.fen === incoming.fen &&
+        prevMoves === nextMoves &&
+        prev.status === incoming.status &&
+        prev.draw_offer_by === incoming.draw_offer_by &&
+        prev.winner === incoming.winner &&
+        prev.white_player_id === incoming.white_player_id &&
+        prev.black_player_id === incoming.black_player_id;
+      if (sameState) return prev;
+      return incoming;
+    });
+    if (incoming.status !== 'finished') {
+      timeoutReportedRef.current = false;
+    }
+  }, []);
 
+  const broadcastRoom = useCallback((updated: ChessRoomRow) => {
+    try {
+      channelRef.current?.send({
+        type: 'broadcast',
+        event: 'room_update',
+        payload: updated,
+      });
+    } catch {
+      // polling fallback will still sync
+    }
+  }, []);
+
+  const fetchLatestRoom = useCallback(async (roomId: string) => {
+    if (!supabase) return;
+    const { data } = await supabase
+      .from('chess_rooms')
+      .select('*')
+      .eq('id', roomId)
+      .maybeSingle();
+    if (data) {
+      applyIncomingRoom(data as ChessRoomRow);
+    }
+  }, [applyIncomingRoom]);
+
+  // 1. Realtime Broadcast + Postgres Changes (by PK id) + Presence
+  useEffect(() => {
+    if (!supabase || !room?.id || !room?.code || !playerId) return;
+
+    const roomId = room.id;
     const code = room.code;
+
     const channel = supabase
       .channel(`chess-room-${code}`, {
-        config: { presence: { key: playerId } },
+        config: {
+          broadcast: { self: false },
+          presence: { key: playerId },
+        },
+      })
+      .on('broadcast', { event: 'room_update' }, ({ payload }) => {
+        if (payload && (payload as ChessRoomRow).id === roomId) {
+          applyIncomingRoom(payload as ChessRoomRow);
+        }
       })
       .on(
         'postgres_changes',
@@ -62,14 +120,10 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
           event: 'UPDATE',
           schema: 'public',
           table: 'chess_rooms',
-          filter: `code=eq.${code}`,
+          filter: `id=eq.${roomId}`,
         },
         (payload) => {
-          const updated = payload.new as ChessRoomRow;
-          setRoom(updated);
-          if (updated.status !== 'finished') {
-            timeoutReportedRef.current = false;
-          }
+          applyIncomingRoom(payload.new as ChessRoomRow);
         }
       )
       .on('presence', { event: 'sync' }, () => {
@@ -83,6 +137,10 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
             name: playerName,
             joinedAt: new Date().toISOString(),
           });
+          if (roomRef.current) {
+            broadcastRoom(roomRef.current);
+          }
+          fetchLatestRoom(roomId);
         }
       });
 
@@ -93,8 +151,33 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
       channelRef.current = null;
       setOnlinePlayerIds([]);
     };
-  }, [room?.code, playerId, playerName]);
+  }, [room?.id, room?.code, playerId, playerName, applyIncomingRoom, broadcastRoom, fetchLatestRoom]);
 
+  // 2. Reliable 1.5s polling + visibilitychange fallback (covers mobile WebSocket drops)
+  useEffect(() => {
+    if (!supabase || !room?.id) return;
+    const roomId = room.id;
+
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchLatestRoom(roomId);
+      }
+    }, 1500);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLatestRoom(roomId);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [room?.id, fetchLatestRoom]);
+
+  // 3. Live Chess Clocks
   useEffect(() => {
     if (!room) return;
 
@@ -133,14 +216,21 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
           })
           .eq('id', room.id)
           .eq('status', 'active')
-          .then(() => {});
+          .select()
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) {
+              applyIncomingRoom(data as ChessRoomRow);
+              broadcastRoom(data as ChessRoomRow);
+            }
+          });
       }
     };
 
     computeClocks();
     const interval = window.setInterval(computeClocks, 100);
     return () => window.clearInterval(interval);
-  }, [room]);
+  }, [room, applyIncomingRoom, broadcastRoom]);
 
   const syncUrlCode = (code: string | null) => {
     const url = new URL(window.location.href);
@@ -364,57 +454,80 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
         last_move_at: nowIso,
       };
 
-      setRoom((prev) => (prev ? { ...prev, ...patch } : prev));
+      const prevRoom = room;
+      const optimistic = { ...room, ...patch };
+      setRoom(optimistic);
 
-      const { error: updateErr } = await supabase
+      const { data: saved, error: updateErr } = await supabase
         .from('chess_rooms')
         .update(patch)
-        .eq('id', room.id);
+        .eq('id', room.id)
+        .select()
+        .single();
 
-      if (updateErr) {
-        setError(updateErr.message);
+      if (updateErr || !saved) {
+        setRoom(prevRoom);
+        setError(updateErr?.message || 'Move could not be saved.');
         return false;
       }
 
+      const confirmed = saved as ChessRoomRow;
+      setRoom(confirmed);
+      broadcastRoom(confirmed);
       return true;
     },
-    [room, myColor]
+    [room, myColor, broadcastRoom]
   );
 
   const resign = useCallback(async () => {
     if (!supabase || !room || (myColor !== 'w' && myColor !== 'b')) return;
     if (room.status !== 'active') return;
     const winner: 'w' | 'b' = myColor === 'w' ? 'b' : 'w';
-    await supabase
+    const { data } = await supabase
       .from('chess_rooms')
       .update({ status: 'finished', winner, end_reason: 'resignation', draw_offer_by: null })
-      .eq('id', room.id);
-  }, [room, myColor]);
+      .eq('id', room.id)
+      .select()
+      .single();
+    if (data) {
+      setRoom(data as ChessRoomRow);
+      broadcastRoom(data as ChessRoomRow);
+    }
+  }, [room, myColor, broadcastRoom]);
 
   const offerDraw = useCallback(async () => {
     if (!supabase || !room || (myColor !== 'w' && myColor !== 'b')) return;
     if (room.status !== 'active') return;
-    await supabase.from('chess_rooms').update({ draw_offer_by: myColor }).eq('id', room.id);
-  }, [room, myColor]);
+    const { data } = await supabase
+      .from('chess_rooms')
+      .update({ draw_offer_by: myColor })
+      .eq('id', room.id)
+      .select()
+      .single();
+    if (data) {
+      setRoom(data as ChessRoomRow);
+      broadcastRoom(data as ChessRoomRow);
+    }
+  }, [room, myColor, broadcastRoom]);
 
   const respondDraw = useCallback(
     async (accept: boolean) => {
       if (!supabase || !room) return;
-      if (accept) {
-        await supabase
-          .from('chess_rooms')
-          .update({
-            status: 'finished',
-            winner: 'draw',
-            end_reason: 'agreement',
-            draw_offer_by: null,
-          })
-          .eq('id', room.id);
-      } else {
-        await supabase.from('chess_rooms').update({ draw_offer_by: null }).eq('id', room.id);
+      const patch = accept
+        ? { status: 'finished' as const, winner: 'draw' as const, end_reason: 'agreement', draw_offer_by: null }
+        : { draw_offer_by: null };
+      const { data } = await supabase
+        .from('chess_rooms')
+        .update(patch)
+        .eq('id', room.id)
+        .select()
+        .single();
+      if (data) {
+        setRoom(data as ChessRoomRow);
+        broadcastRoom(data as ChessRoomRow);
       }
     },
-    [room]
+    [room, broadcastRoom]
   );
 
   const requestRematch = useCallback(async () => {
@@ -436,8 +549,17 @@ export function usePvpRoom({ playerId, playerName }: UsePvpRoomOptions) {
       last_move_at: null,
     };
     timeoutReportedRef.current = false;
-    await supabase.from('chess_rooms').update(patch).eq('id', room.id);
-  }, [room]);
+    const { data } = await supabase
+      .from('chess_rooms')
+      .update(patch)
+      .eq('id', room.id)
+      .select()
+      .single();
+    if (data) {
+      setRoom(data as ChessRoomRow);
+      broadcastRoom(data as ChessRoomRow);
+    }
+  }, [room, broadcastRoom]);
 
   const leaveRoom = useCallback(() => {
     channelRef.current?.unsubscribe();
