@@ -198,6 +198,10 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
   // Tap-to-select & legal move highlights
   const [moveFrom, setMoveFrom] = useState<Square | null>(null);
   const [optionSquares, setOptionSquares] = useState<Record<string, React.CSSProperties>>({});
+  const [premove, setPremove] = useState<{ from: Square; to: Square } | null>(null);
+  const [premoveFrom, setPremoveFrom] = useState<Square | null>(null);
+  const premoveRef = useRef<{ from: Square; to: Square } | null>(null);
+  premoveRef.current = premove;
 
   // Board Editor state
   const [selectedPiece, setSelectedPiece] = useState<string | 'trash'>('wQ');
@@ -430,6 +434,12 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
     return () => window.clearInterval(interval);
   }, [activeView, localClockRunning, localResult, timeControl, skillLevel, stop, gameHistory.saveGame]);
 
+  const clearPremove = useCallback(() => {
+    setPremove(null);
+    setPremoveFrom(null);
+    premoveRef.current = null;
+  }, []);
+
   const clearSelection = useCallback(() => {
     setMoveFrom(null);
     setOptionSquares({});
@@ -449,6 +459,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
     (tc: TimeControl = timeControl) => {
       stop();
       clearSelection();
+      clearPremove();
       setArrows([]);
       setLastMoveSquares(null);
       gameReview.clearReview();
@@ -812,7 +823,62 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
     ]
   );
 
+  const getPremovePlayerColor = useCallback((): 'w' | 'b' | null => {
+    if (activeView === 'game-bot') {
+      if (localResult || isViewingPastLocal) return null;
+      return game.turn() === 'b' ? 'w' : null;
+    }
+    if (activeView === 'game-pvp') {
+      if (!pvp.room || pvp.room.status !== 'active' || isViewingPastPvp) return null;
+      if (pvp.myColor !== 'w' && pvp.myColor !== 'b') return null;
+      return pvp.room.turn !== pvp.myColor ? pvp.myColor : null;
+    }
+    return null;
+  }, [activeView, localResult, isViewingPastLocal, game, pvp.room, pvp.myColor, isViewingPastPvp]);
+
+  // Auto-execute queued premove in PvP the instant it becomes our turn
+  useEffect(() => {
+    if (activeView !== 'game-pvp') return;
+    if (!pvp.room || pvp.room.status !== 'active') {
+      if (premoveRef.current) clearPremove();
+      return;
+    }
+    if (pvp.myColor !== 'w' && pvp.myColor !== 'b') return;
+    if (pvp.room.turn === pvp.myColor && premoveRef.current) {
+      const pm = premoveRef.current;
+      clearPremove();
+      pvp.makeMove(pm.from, pm.to);
+    }
+  }, [activeView, pvp.room?.turn, pvp.room?.fen, pvp.room?.status, pvp.myColor, pvp.makeMove, clearPremove]);
+
+  // Auto-execute queued premove in Bot mode the instant Stockfish finishes moving
+  useEffect(() => {
+    if (activeView !== 'game-bot') return;
+    if (localResult) {
+      if (premoveRef.current) clearPremove();
+      return;
+    }
+    if (game.turn() === 'w' && premoveRef.current) {
+      const pm = premoveRef.current;
+      clearPremove();
+      const t = window.setTimeout(() => {
+        executeMove(pm.from, pm.to);
+      }, 50);
+      return () => window.clearTimeout(t);
+    }
+  }, [activeView, fen, localResult, game, executeMove, clearPremove]);
+
   const onDrop = (sourceSquare: Square, targetSquare: Square): boolean => {
+    const premoveColor = getPremovePlayerColor();
+    if (premoveColor && sourceSquare !== targetSquare) {
+      const currentChess = new Chess(activeFen);
+      const piece = currentChess.get(sourceSquare);
+      if (piece && piece.color === premoveColor) {
+        setPremove({ from: sourceSquare, to: targetSquare });
+        setPremoveFrom(null);
+      }
+      return false;
+    }
     if (activeView === 'analyze-editor') {
       const next = new Chess(fen);
       const piece = next.remove(sourceSquare);
@@ -848,6 +914,35 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
       setFen(updatedFen);
       setStartFen(updatedFen);
       setGame(next);
+      return;
+    }
+
+    const premoveColor = getPremovePlayerColor();
+    if (premoveColor) {
+      const currentChess = new Chess(activeFen);
+      const clickedPiece = currentChess.get(square);
+
+      if (!premoveFrom) {
+        if (clickedPiece && clickedPiece.color === premoveColor) {
+          setPremoveFrom(square);
+        } else {
+          clearPremove();
+        }
+        return;
+      }
+
+      if (premoveFrom === square) {
+        clearPremove();
+        return;
+      }
+
+      if (clickedPiece && clickedPiece.color === premoveColor) {
+        setPremoveFrom(square);
+        return;
+      }
+
+      setPremove({ from: premoveFrom, to: square });
+      setPremoveFrom(null);
       return;
     }
 
@@ -956,8 +1051,15 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
       base[lastMoveSquares.from] = { backgroundColor: activeBoardTheme.lastMoveFrom };
       base[lastMoveSquares.to] = { backgroundColor: activeBoardTheme.lastMoveTo };
     }
+    if (premove && (activeView === 'game-bot' || activeView === 'game-pvp')) {
+      base[premove.from] = { backgroundColor: 'rgba(239, 68, 68, 0.38)' };
+      base[premove.to] = { backgroundColor: 'rgba(239, 68, 68, 0.56)' };
+    }
+    if (premoveFrom && (activeView === 'game-bot' || activeView === 'game-pvp')) {
+      base[premoveFrom] = { backgroundColor: 'rgba(239, 68, 68, 0.45)' };
+    }
     return mergeCheckSquareStyles({ ...base, ...optionSquares }, activeKingStatus);
-  }, [lastMoveSquares, activeView, activeBoardTheme, optionSquares, activeKingStatus]);
+  }, [lastMoveSquares, premove, premoveFrom, activeView, activeBoardTheme, optionSquares, activeKingStatus]);
   const topColor: 'w' | 'b' = boardOrientation === 'white' ? 'b' : 'w';
   const bottomColor: 'w' | 'b' = boardOrientation === 'white' ? 'w' : 'b';
 
@@ -1018,6 +1120,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
             type="button"
             onClick={() => {
               stop();
+              clearPremove();
               setLocalClockRunning(false);
               setActiveView('tab');
             }}
@@ -1061,6 +1164,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                     boardOrientation={boardOrientation}
                     onPieceDrop={onDrop}
                     onSquareClick={onSquareClick}
+                    onSquareRightClick={clearPremove}
                     customSquareStyles={mergedSquareStyles}
                     customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
                     customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
@@ -1193,6 +1297,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
           <button
             type="button"
             onClick={() => {
+              clearPremove();
               pvp.leaveRoom();
               setActiveView('tab');
             }}
@@ -1241,6 +1346,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                     boardOrientation={boardOrientation}
                     onPieceDrop={onDrop}
                     onSquareClick={onSquareClick}
+                    onSquareRightClick={clearPremove}
                     customSquareStyles={mergedSquareStyles}
                     customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
                     customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
