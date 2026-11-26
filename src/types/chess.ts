@@ -115,3 +115,22 @@ export interface GameHistoryEntry {
   final_fen: string;
   created_at: string;
 }
+
+export type MoveClassification =
+  | 'brilliant'
+  | 'best'
+  | 'good'
+  | 'inaccuracy'
+  | 'mistake'
+  | 'blunder';
+
+export interface MoveReview {
+  ply: number; // 1-based ply index
+  san: string;
+  uci: string;
+  toSquare: Square;
+  color: 'w' | 'b';
+  classification: MoveClassification;
+  cpLoss: number;
+  bestMoveUci: string | null;
+}

@@ -64,21 +64,21 @@ export function computePlayerProgress(
   );
 
   const buckets: Record<'rapid' | 'blitz' | 'bullet', { rating: number; lastDelta: number; count: number }> = {
-    rapid: { rating: 800, lastDelta: 0, count: 0 },
-    blitz: { rating: 800, lastDelta: 0, count: 0 },
-    bullet: { rating: 800, lastDelta: 0, count: 0 },
+    rapid: { rating: 400, lastDelta: 0, count: 0 },
+    blitz: { rating: 400, lastDelta: 0, count: 0 },
+    bullet: { rating: 400, lastDelta: 0, count: 0 },
   };
 
   for (const g of sorted) {
     const mode = classifyMode(g.time_control_label || 'Rapid');
     const b = buckets[mode];
     const delta = g.result === 'win' ? 16 : g.result === 'loss' ? -12 : 2;
-    b.rating = Math.max(400, b.rating + delta);
+    b.rating = Math.max(100, b.rating + delta);
     b.lastDelta = delta;
     b.count += 1;
   }
 
-  const puzzleRating = 600 + solvedPuzzlesCount * 14;
+  const puzzleRating = 400 + solvedPuzzlesCount * 14;
   const puzzleDelta = solvedPuzzlesCount > 0 ? 14 : 0;
 
   const wins = games.filter((g) => g.result === 'win').length;

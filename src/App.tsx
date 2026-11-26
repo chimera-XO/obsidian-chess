@@ -20,6 +20,7 @@ import { useStockfish } from './hooks/useStockfish';
 import { useGeminiLive } from './hooks/useGeminiLive';
 import { usePvpRoom } from './hooks/usePvpRoom';
 import { useGameHistory } from './hooks/useGameHistory';
+import { useGameReview } from './hooks/useGameReview';
 import { AuthScreen } from './components/AuthScreen';
 import { LoadingScreen } from './components/LoadingScreen';
 import { BottomNav } from './components/BottomNav';
@@ -36,6 +37,7 @@ import { MoveHistoryNavigator } from './components/MoveHistoryNavigator';
 import { HistoryPanel } from './components/HistoryPanel';
 import { PuzzlesPanel } from './components/PuzzlesPanel';
 import { KingStatusOverlay, getBoardKingStatus, mergeCheckSquareStyles } from './components/KingStatusOverlay';
+import { MoveBadgeOverlay, CLASSIFICATION_META } from './components/MoveBadgeOverlay';
 import { AppearanceSheet } from './components/AppearanceSheet';
 import { getBoardTheme, type UiThemeId, type BoardThemeId } from './constants/themes';
 import { playChessSound } from './utils/chessAudio';
@@ -221,9 +223,12 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
   const { isReady, analysis, analyzePosition, getBestMove, stop } = useStockfish();
   const pvp = usePvpRoom({ playerId: userId, playerName: username });
   const gameHistory = useGameHistory(userId);
+  const gameReview = useGameReview();
 
   const gameRef = useRef(game);
   gameRef.current = game;
+  const historyRef = useRef(history);
+  historyRef.current = history;
   const analysisRef = useRef(analysis);
   analysisRef.current = analysis;
   const lastSyncedKeyRef = useRef<string>('');
@@ -411,7 +416,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
               result: userWon ? 'win' : 'loss',
               end_reason: 'timeout',
               time_control_label: timeControl.label,
-              moves: gameRef.current.history(),
+              moves: historyRef.current,
               final_fen: gameRef.current.fen(),
             });
           } else {
@@ -430,12 +435,13 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
     setOptionSquares({});
   }, []);
 
-  const syncGame = useCallback((nextGame: Chess) => {
+  const syncGame = useCallback((nextGame: Chess, explicitHistory?: string[]) => {
     const nextFen = nextGame.fen();
-    const nextHistory = nextGame.history();
+    const nextHistory = explicitHistory ?? nextGame.history();
     setGame(nextGame);
     setFen(nextFen);
     setHistory(nextHistory);
+    historyRef.current = nextHistory;
     setViewPly(nextHistory.length);
   }, []);
 
@@ -445,6 +451,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
       clearSelection();
       setArrows([]);
       setLastMoveSquares(null);
+      gameReview.clearReview();
       setLocalClockRunning(false);
       setLocalResult(null);
       setLocalClocks({ w: tc.baseMs, b: tc.baseMs });
@@ -684,10 +691,11 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
         return false;
       }
 
+      const updatedHistory = [...historyRef.current, playedMove.san];
       clearSelection();
       setArrows([]);
       setLastMoveSquares({ from: sourceSquare, to: targetSquare });
-      syncGame(next);
+      syncGame(next, updatedHistory);
 
       if (next.isCheckmate()) playChessSound('checkmate', soundEnabled);
       else if (next.inCheck()) playChessSound('check', soundEnabled);
@@ -734,7 +742,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
             result: isMate ? 'win' : 'draw',
             end_reason: isMate ? 'checkmate' : 'draw',
             time_control_label: timeControl.label,
-            moves: next.history(),
+            moves: updatedHistory,
             final_fen: next.fen(),
           });
           return true;
@@ -749,6 +757,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
               to: uci.slice(2, 4),
               promotion: uci[4] || 'q',
             });
+            const botHistory = botMove ? [...updatedHistory, botMove.san] : updatedHistory;
             if (botMove) {
               setLastMoveSquares({ from: uci.slice(0, 2) as Square, to: uci.slice(2, 4) as Square });
               if (aiNext.isCheckmate()) playChessSound('checkmate', soundEnabled);
@@ -756,7 +765,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
               else if (botMove.captured) playChessSound('capture', soundEnabled);
               else playChessSound('move', soundEnabled);
             }
-            syncGame(aiNext);
+            syncGame(aiNext, botHistory);
 
             if (timeControl.baseMs > 0 && timeControl.incrementMs > 0) {
               setLocalClocks((prev) => ({ ...prev, b: prev.b + timeControl.incrementMs }));
@@ -773,7 +782,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                 result: isMate ? 'loss' : 'draw',
                 end_reason: isMate ? 'checkmate' : 'draw',
                 time_control_label: timeControl.label,
-                moves: aiNext.history(),
+                moves: botHistory,
                 final_fen: aiNext.fen(),
               });
             }
@@ -875,11 +884,17 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
       }
       clearSelection();
       setArrows([]);
-      syncGame(replay);
+      const replayMoves = replay.history();
+      syncGame(replay, replayMoves);
+      if (replayMoves.length > 0) {
+        gameReview.runReview(replayMoves, START_FEN);
+      } else {
+        gameReview.clearReview();
+      }
       setActiveTab('analyze');
       setActiveView('analyze-board');
     },
-    [clearSelection, syncGame]
+    [clearSelection, syncGame, gameReview.runReview, gameReview.clearReview]
   );
 
   const handleCoachFromEditor = () => {
@@ -908,9 +923,9 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
     if (!best || best.length < 4) return;
     const next = new Chess(game.fen());
     try {
-      next.move({ from: best.slice(0, 2), to: best.slice(2, 4), promotion: best[4] || 'q' });
+      const stepped = next.move({ from: best.slice(0, 2), to: best.slice(2, 4), promotion: best[4] || 'q' });
       clearSelection();
-      syncGame(next);
+      syncGame(next, stepped ? [...historyRef.current, stepped.san] : historyRef.current);
       setArrows([]);
     } catch {
       // ignore
@@ -1357,6 +1372,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
             onClick={() => {
               live.disconnect();
               stop();
+              gameReview.stopReview();
               setActiveTab('analyze');
               setActiveView('tab');
             }}
@@ -1396,11 +1412,87 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                   customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
                 />
                 <KingStatusOverlay fen={displayedLocalFen} orientation="white" />
+                <MoveBadgeOverlay review={gameReview.reviews[viewPly]} orientation="white" />
               </div>
             </div>
           </div>
 
           <div className="lg:col-span-5 space-y-4">
+            {/* Full-Game Review & Move Classification Panel */}
+            {history.length > 0 && (
+              <div className="glass-panel rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+                    Game Review
+                  </span>
+                  {gameReview.isReviewing ? (
+                    <span className="font-mono text-[11px] text-zinc-400">
+                      Analyzing {gameReview.progress.current}/{gameReview.progress.total}...
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => gameReview.runReview(history, startFen)}
+                      className="px-2.5 py-1 rounded-lg glass-subtle hover:bg-zinc-800 text-[11px] font-medium text-zinc-200"
+                    >
+                      {Object.keys(gameReview.reviews).length > 0 ? 'Re-Analyze All' : 'Review All Moves'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Classification counts strip */}
+                {Object.keys(gameReview.reviews).length > 0 && (
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {(['brilliant', 'best', 'good', 'inaccuracy', 'mistake', 'blunder'] as const).map((cls) => {
+                      const meta = CLASSIFICATION_META[cls];
+                      const count = Object.values(gameReview.reviews).filter((r) => r.classification === cls).length;
+                      return (
+                        <div
+                          key={cls}
+                          className="rounded-xl bg-black/40 border border-white/5 py-1.5 px-1 flex flex-col items-center gap-0.5"
+                          title={meta.label}
+                        >
+                          <span
+                            className="w-5 h-5 rounded-full flex items-center justify-center font-mono text-[9px] font-black"
+                            style={{ backgroundColor: meta.bg, color: meta.text }}
+                          >
+                            {meta.symbol}
+                          </span>
+                          <span className="font-mono text-[11px] font-bold text-zinc-200">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Active move verdict */}
+                {gameReview.reviews[viewPly] && (() => {
+                  const activeRev = gameReview.reviews[viewPly];
+                  const meta = CLASSIFICATION_META[activeRev.classification];
+                  return (
+                    <div className={`rounded-xl border px-3 py-2 flex items-center justify-between gap-2 text-xs ${meta.pill}`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center font-mono text-[10px] font-black shrink-0"
+                          style={{ backgroundColor: meta.bg, color: meta.text }}
+                        >
+                          {meta.symbol}
+                        </span>
+                        <span className="font-semibold truncate">
+                          {activeRev.san} is a {meta.label} move
+                        </span>
+                      </div>
+                      {activeRev.bestMoveUci && activeRev.classification !== 'best' && activeRev.classification !== 'brilliant' && (
+                        <span className="font-mono text-[10px] opacity-85 shrink-0">
+                          Best: {activeRev.bestMoveUci}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             <div className="glass-panel rounded-2xl p-4 space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1455,6 +1547,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
               <MoveHistoryNavigator
                 moves={history}
                 viewPly={viewPly}
+                moveReviews={gameReview.reviews}
                 onChangePly={(ply) => {
                   clearSelection();
                   setArrows([]);

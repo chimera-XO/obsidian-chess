@@ -1,16 +1,20 @@
 import React from 'react';
 import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
+import { CLASSIFICATION_META } from './MoveBadgeOverlay';
+import type { MoveReview } from '../types/chess';
 
 interface MoveHistoryNavigatorProps {
   moves: string[];
   viewPly: number;
   onChangePly: (ply: number) => void;
+  moveReviews?: Record<number, MoveReview>;
 }
 
 export const MoveHistoryNavigator: React.FC<MoveHistoryNavigatorProps> = ({
   moves,
   viewPly,
   onChangePly,
+  moveReviews,
 }) => {
   const total = moves.length;
   const isAtStart = viewPly <= 0;
@@ -72,13 +76,15 @@ export const MoveHistoryNavigator: React.FC<MoveHistoryNavigatorProps> = ({
         </div>
       </div>
 
-      <div className="max-h-28 overflow-y-auto bg-zinc-950/60 border border-white/5 rounded-xl p-2 font-mono text-xs text-zinc-300 flex flex-wrap gap-1">
+      <div className="max-h-32 overflow-y-auto bg-zinc-950/60 border border-white/5 rounded-xl p-2 font-mono text-xs text-zinc-300 flex flex-wrap gap-1">
         {total === 0 ? (
           <span className="text-zinc-600 px-1 py-0.5">No moves yet.</span>
         ) : (
           moves.map((m, idx) => {
             const ply = idx + 1;
             const isSelected = ply === viewPly;
+            const rev = moveReviews?.[ply];
+            const meta = rev ? CLASSIFICATION_META[rev.classification] : null;
             return (
               <React.Fragment key={idx}>
                 {idx % 2 === 0 && (
@@ -89,13 +95,21 @@ export const MoveHistoryNavigator: React.FC<MoveHistoryNavigatorProps> = ({
                 <button
                   type="button"
                   onClick={() => onChangePly(ply)}
-                  className={`px-1.5 py-0.5 rounded transition ${
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded transition ${
                     isSelected
                       ? 'bg-zinc-100 text-zinc-950 font-semibold'
                       : 'hover:bg-zinc-800 text-zinc-300'
                   }`}
                 >
-                  {m}
+                  <span>{m}</span>
+                  {meta && (
+                    <span
+                      className="inline-flex items-center justify-center rounded-full px-1 text-[9px] font-black leading-tight"
+                      style={{ backgroundColor: meta.bg, color: meta.text }}
+                    >
+                      {meta.symbol}
+                    </span>
+                  )}
                 </button>
               </React.Fragment>
             );
