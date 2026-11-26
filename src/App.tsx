@@ -1565,9 +1565,20 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
           recentGames={gameHistory.games}
           solvedPuzzlesCount={solvedPuzzles.length}
           totalPuzzlesCount={CHESS_PUZZLES.length}
+          nextPuzzle={CHESS_PUZZLES.find((p) => !solvedPuzzles.includes(p.id)) || CHESS_PUZZLES[0]}
+          boardDarkSquare={activeBoardTheme.darkSquare}
+          boardLightSquare={activeBoardTheme.lightSquare}
           onOpenPlaySetup={() => setActiveView('play-setup')}
-          onOpenPuzzles={() => setActiveTab('puzzles')}
-          onOpenAnalyze={() => setActiveTab('analyze')}
+          onOpenNextPuzzle={() => {
+            const nextP = CHESS_PUZZLES.find((p) => !solvedPuzzles.includes(p.id)) || CHESS_PUZZLES[0];
+            loadPuzzle(nextP, false);
+            setActiveTab('puzzles');
+          }}
+          onOpenAnalyzeBoard={() => {
+            resetLocalBoard();
+            setActiveTab('analyze');
+            setActiveView('analyze-board');
+          }}
           onOpenHistory={() => setActiveTab('history')}
           onReviewGame={(g) => openInAnalysis(g.moves || [], g.final_fen)}
           onOpenAppearance={() => setAppearanceOpen(true)}
