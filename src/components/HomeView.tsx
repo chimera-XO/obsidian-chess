@@ -1,5 +1,5 @@
 import React from 'react';
-import { Swords, Puzzle, Cpu, ChevronRight, LogOut, Sparkles } from 'lucide-react';
+import { Swords, Puzzle, Cpu, ChevronRight, LogOut, Sparkles, Palette } from 'lucide-react';
 import type { GameHistoryEntry } from '../types/chess';
 
 interface HomeViewProps {
@@ -12,6 +12,7 @@ interface HomeViewProps {
   onOpenAnalyze: () => void;
   onOpenHistory: () => void;
   onReviewGame: (game: GameHistoryEntry) => void;
+  onOpenAppearance: () => void;
   onSignOut: () => void;
 }
 
@@ -25,32 +26,45 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenAnalyze,
   onOpenHistory,
   onReviewGame,
+  onOpenAppearance,
   onSignOut,
 }) => {
   const wins = recentGames.filter((g) => g.result === 'win').length;
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-6 pb-40 space-y-5">
+    <div className="max-w-lg mx-auto px-4 pt-6 pb-44 space-y-5">
       {/* Profile Top Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center text-xl shadow-inner">
+          <div className="w-11 h-11 rounded-2xl glass-panel flex items-center justify-center text-xl">
             ♞
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-zinc-100">Obsidian Chess</h1>
+            <h1 className="font-display text-base font-bold tracking-[0.14em] uppercase text-zinc-100">
+              Obsidian Chess
+            </h1>
             <p className="text-xs font-mono text-zinc-400">@{username}</p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="p-2.5 rounded-xl glass-subtle hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition"
-          title="Sign Out"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenAppearance}
+            className="p-2.5 rounded-xl glass-subtle hover:border-white/20 text-zinc-200 transition"
+            title="Theme & Sound"
+          >
+            <Palette className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="p-2.5 rounded-xl glass-subtle hover:border-white/20 text-zinc-400 hover:text-zinc-100 transition"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Quick Stats */}
@@ -76,23 +90,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <button
           type="button"
           onClick={onOpenPuzzles}
-          className="glass-panel rounded-2xl p-4 text-left space-y-2 hover:border-white/20 transition group"
+          className="glass-panel rounded-2xl p-4 text-left space-y-2.5 hover:border-white/25 transition"
         >
-          <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-200">
+          <div className="w-9 h-9 rounded-xl glass-subtle flex items-center justify-center text-zinc-100">
             <Puzzle className="w-4 h-4" />
           </div>
           <div>
             <p className="text-sm font-semibold text-zinc-100">Puzzles</p>
-            <p className="text-[11px] text-zinc-400">Guided by Live Coach</p>
+            <p className="text-[11px] text-zinc-400">515 tactics · Live Tutor</p>
           </div>
         </button>
 
         <button
           type="button"
           onClick={onOpenAnalyze}
-          className="glass-panel rounded-2xl p-4 text-left space-y-2 hover:border-white/20 transition group"
+          className="glass-panel rounded-2xl p-4 text-left space-y-2.5 hover:border-white/25 transition"
         >
-          <div className="w-9 h-9 rounded-xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-200">
+          <div className="w-9 h-9 rounded-xl glass-subtle flex items-center justify-center text-zinc-100">
             <Cpu className="w-4 h-4" />
           </div>
           <div>
@@ -131,7 +145,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 key={g.id}
                 type="button"
                 onClick={() => onReviewGame(g)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-zinc-950/70 border border-white/5 hover:border-white/15 transition text-left"
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl glass-subtle hover:border-white/20 transition text-left"
               >
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-zinc-100 truncate">
@@ -145,7 +159,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <span
                     className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
                       g.result === 'win'
-                        ? 'bg-zinc-100 text-zinc-950'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         : 'bg-zinc-900 text-zinc-400 border border-white/10'
                     }`}
                   >
@@ -159,15 +173,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
         )}
       </div>
 
-      {/* Prominent Play CTA anchored right above the 5-tab BottomNav */}
-      <div className="fixed bottom-20 left-0 right-0 z-30 px-4 pointer-events-none">
+      {/* Sculpted Primary Play CTA anchored above Floating Glass Dock */}
+      <div className="fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
         <div className="max-w-lg mx-auto pointer-events-auto">
           <button
             type="button"
             onClick={onOpenPlaySetup}
-            className="w-full py-4 rounded-2xl bg-zinc-100 hover:bg-white active:scale-[0.99] text-zinc-950 font-bold text-base flex items-center justify-center gap-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.75)] border border-white/30 transition"
+            className="btn-primary w-full py-4 rounded-2xl font-display font-bold tracking-[0.16em] uppercase text-sm flex items-center justify-center gap-2.5"
           >
-            <Swords className="w-5 h-5" />
+            <Swords className="w-4 h-4" />
             Play
           </button>
         </div>

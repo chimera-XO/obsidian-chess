@@ -13,6 +13,7 @@ import {
   Wifi,
   WifiOff,
   Repeat,
+  Palette,
 } from 'lucide-react';
 import { useAuth } from './hooks/useAuth';
 import { useStockfish } from './hooks/useStockfish';
@@ -35,6 +36,10 @@ import { MoveHistoryNavigator } from './components/MoveHistoryNavigator';
 import { HistoryPanel } from './components/HistoryPanel';
 import { PuzzlesPanel } from './components/PuzzlesPanel';
 import { KingStatusOverlay, getBoardKingStatus, mergeCheckSquareStyles } from './components/KingStatusOverlay';
+import { AppearanceSheet } from './components/AppearanceSheet';
+import { getBoardTheme, type UiThemeId, type BoardThemeId } from './constants/themes';
+import { playChessSound } from './utils/chessAudio';
+import { getMaterialSummary } from './utils/material';
 import { DEFAULT_TIME_CONTROL } from './constants/timeControls';
 import { CHESS_PUZZLES } from './constants/puzzles';
 import { buildBoardSnapshot, getFenAtPly, uciPvToSan } from './utils/chessFormat';
@@ -130,6 +135,60 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
   // PvP non-destructive move browsing & invite copy
   const [pvpViewPly, setPvpViewPly] = useState<number>(0);
   const [copiedInvite, setCopiedInvite] = useState(false);
+
+  // Appearance & Audio preferences (persisted)
+  const [uiTheme, setUiTheme] = useState<UiThemeId>(() => {
+    try {
+      const v = localStorage.getItem('obsidian_ui_theme');
+      return v === 'gold' ? 'gold' : 'crimson';
+    } catch {
+      return 'crimson';
+    }
+  });
+  const [boardThemeId, setBoardThemeId] = useState<BoardThemeId>(() => {
+    try {
+      const v = localStorage.getItem('obsidian_board_theme') as BoardThemeId | null;
+      return v || 'crimson-walnut';
+    } catch {
+      return 'crimson-walnut';
+    }
+  });
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('obsidian_sound_enabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [lastMoveSquares, setLastMoveSquares] = useState<{ from: Square; to: Square } | null>(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', uiTheme);
+    try {
+      localStorage.setItem('obsidian_ui_theme', uiTheme);
+    } catch {
+      // ignore
+    }
+  }, [uiTheme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('obsidian_board_theme', boardThemeId);
+    } catch {
+      // ignore
+    }
+  }, [boardThemeId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('obsidian_sound_enabled', String(soundEnabled));
+    } catch {
+      // ignore
+    }
+  }, [soundEnabled]);
+
+  const activeBoardTheme = useMemo(() => getBoardTheme(boardThemeId), [boardThemeId]);
 
   // Tap-to-select & legal move highlights
   const [moveFrom, setMoveFrom] = useState<Square | null>(null);
@@ -382,6 +441,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
       stop();
       clearSelection();
       setArrows([]);
+      setLastMoveSquares(null);
       setLocalClockRunning(false);
       setLocalResult(null);
       setLocalClocks({ w: tc.baseMs, b: tc.baseMs });
@@ -613,16 +673,23 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
 
       const movingTurn = game.turn();
       const next = new Chess(game.fen());
+      let playedMove;
       try {
-        const move = next.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
-        if (!move) return false;
+        playedMove = next.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
+        if (!playedMove) return false;
       } catch {
         return false;
       }
 
       clearSelection();
       setArrows([]);
+      setLastMoveSquares({ from: sourceSquare, to: targetSquare });
       syncGame(next);
+
+      if (next.isCheckmate()) playChessSound('checkmate', soundEnabled);
+      else if (next.inCheck()) playChessSound('check', soundEnabled);
+      else if (playedMove.captured) playChessSound('capture', soundEnabled);
+      else playChessSound('move', soundEnabled);
 
       if (activeView === 'game-self') {
         if (timeControl.baseMs > 0) {
@@ -674,11 +741,18 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
           if (!uci || uci.length < 4) return;
           const aiNext = new Chess(next.fen());
           try {
-            aiNext.move({
+            const botMove = aiNext.move({
               from: uci.slice(0, 2),
               to: uci.slice(2, 4),
               promotion: uci[4] || 'q',
             });
+            if (botMove) {
+              setLastMoveSquares({ from: uci.slice(0, 2) as Square, to: uci.slice(2, 4) as Square });
+              if (aiNext.isCheckmate()) playChessSound('checkmate', soundEnabled);
+              else if (aiNext.inCheck()) playChessSound('check', soundEnabled);
+              else if (botMove.captured) playChessSound('capture', soundEnabled);
+              else playChessSound('move', soundEnabled);
+            }
             syncGame(aiNext);
 
             if (timeControl.baseMs > 0 && timeControl.incrementMs > 0) {
@@ -857,10 +931,15 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
 
   const pvSan = uciPvToSan(displayedLocalFen, analysis.pv);
   const activeKingStatus = useMemo(() => getBoardKingStatus(activeFen), [activeFen]);
-  const mergedSquareStyles = useMemo(
-    () => mergeCheckSquareStyles(optionSquares, activeKingStatus),
-    [optionSquares, activeKingStatus]
-  );
+  const material = useMemo(() => getMaterialSummary(activeFen), [activeFen]);
+  const mergedSquareStyles = useMemo(() => {
+    const base: Record<string, React.CSSProperties> = {};
+    if (lastMoveSquares && activeView !== 'analyze-editor') {
+      base[lastMoveSquares.from] = { backgroundColor: activeBoardTheme.lastMoveFrom };
+      base[lastMoveSquares.to] = { backgroundColor: activeBoardTheme.lastMoveTo };
+    }
+    return mergeCheckSquareStyles({ ...base, ...optionSquares }, activeKingStatus);
+  }, [lastMoveSquares, activeView, activeBoardTheme, optionSquares, activeKingStatus]);
   const topColor: 'w' | 'b' = boardOrientation === 'white' ? 'b' : 'w';
   const bottomColor: 'w' | 'b' = boardOrientation === 'white' ? 'w' : 'b';
 
@@ -953,9 +1032,11 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                 timeMs={localClocks[topColor]}
                 isUntimed={timeControl.baseMs === 0}
                 isActive={localClockRunning && game.turn() === topColor && !localResult}
+                capturedPieces={topColor === 'w' ? material.capturedByWhite : material.capturedByBlack}
+                materialAdvantage={topColor === 'w' ? material.whiteAdvantage : material.blackAdvantage}
               />
 
-              <div className="glass-panel p-2.5 rounded-2xl">
+              <div className="board-frame p-2.5 rounded-2xl">
                 <div className="relative">
                   <Chessboard
                     position={displayedLocalFen}
@@ -963,8 +1044,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                     onPieceDrop={onDrop}
                     onSquareClick={onSquareClick}
                     customSquareStyles={mergedSquareStyles}
-                    customDarkSquareStyle={{ backgroundColor: '#27272a' }}
-                    customLightSquareStyle={{ backgroundColor: '#52525b' }}
+                    customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
+                    customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
                     customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
                   />
                   <KingStatusOverlay fen={displayedLocalFen} orientation={boardOrientation} />
@@ -977,6 +1058,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                 timeMs={localClocks[bottomColor]}
                 isUntimed={timeControl.baseMs === 0}
                 isActive={localClockRunning && game.turn() === bottomColor && !localResult}
+                capturedPieces={bottomColor === 'w' ? material.capturedByWhite : material.capturedByBlack}
+                materialAdvantage={bottomColor === 'w' ? material.whiteAdvantage : material.blackAdvantage}
               />
             </div>
           </div>
@@ -1129,9 +1212,11 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                 timeMs={pvp.displayClocks[topColor]}
                 isUntimed={room.base_time_ms === 0}
                 isActive={room.status === 'active' && room.turn === topColor}
+                capturedPieces={topColor === 'w' ? material.capturedByWhite : material.capturedByBlack}
+                materialAdvantage={topColor === 'w' ? material.whiteAdvantage : material.blackAdvantage}
               />
 
-              <div className="glass-panel p-2.5 rounded-2xl">
+              <div className="board-frame p-2.5 rounded-2xl">
                 <div className="relative">
                   <Chessboard
                     position={displayedPvpFen}
@@ -1139,8 +1224,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                     onPieceDrop={onDrop}
                     onSquareClick={onSquareClick}
                     customSquareStyles={mergedSquareStyles}
-                    customDarkSquareStyle={{ backgroundColor: '#27272a' }}
-                    customLightSquareStyle={{ backgroundColor: '#52525b' }}
+                    customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
+                    customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
                     customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
                   />
                   <KingStatusOverlay fen={displayedPvpFen} orientation={boardOrientation} />
@@ -1157,6 +1242,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                 isUntimed={room.base_time_ms === 0}
                 isActive={room.status === 'active' && room.turn === bottomColor}
                 statusTag={pvp.myColor === bottomColor ? 'You' : undefined}
+                capturedPieces={bottomColor === 'w' ? material.capturedByWhite : material.capturedByBlack}
+                materialAdvantage={bottomColor === 'w' ? material.whiteAdvantage : material.blackAdvantage}
               />
             </div>
           </div>
@@ -1293,7 +1380,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           <div className="lg:col-span-7 flex items-stretch justify-center gap-3">
             <EvalBar analysis={analysis} />
-            <div className="w-full max-w-[480px] glass-panel p-2.5 rounded-2xl">
+            <div className="w-full max-w-[480px] board-frame p-2.5 rounded-2xl">
               <div className="relative">
                 <Chessboard
                   position={displayedLocalFen}
@@ -1301,8 +1388,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                   onSquareClick={onSquareClick}
                   customArrows={arrows}
                   customSquareStyles={mergedSquareStyles}
-                  customDarkSquareStyle={{ backgroundColor: '#27272a' }}
-                  customLightSquareStyle={{ backgroundColor: '#52525b' }}
+                  customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
+                  customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
                   customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
                 />
                 <KingStatusOverlay fen={displayedLocalFen} orientation="white" />
@@ -1413,13 +1500,13 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           <div className="lg:col-span-7 flex justify-center">
-            <div className="w-full max-w-[480px] glass-panel p-2.5 rounded-2xl">
+            <div className="w-full max-w-[480px] board-frame p-2.5 rounded-2xl">
               <Chessboard
                 position={fen}
                 onPieceDrop={onDrop}
                 onSquareClick={onSquareClick}
-                customDarkSquareStyle={{ backgroundColor: '#27272a' }}
-                customLightSquareStyle={{ backgroundColor: '#52525b' }}
+                customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
+                customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
                 customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
               />
             </div>
@@ -1483,6 +1570,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
           onOpenAnalyze={() => setActiveTab('analyze')}
           onOpenHistory={() => setActiveTab('history')}
           onReviewGame={(g) => openInAnalysis(g.moves || [], g.final_fen)}
+          onOpenAppearance={() => setAppearanceOpen(true)}
           onSignOut={handleSignOutClick}
         />
       )}
@@ -1491,7 +1579,7 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
         <div className="max-w-5xl mx-auto px-4 pt-5 pb-28 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
             <div className="lg:col-span-7 flex justify-center">
-              <div className="w-full max-w-[480px] glass-panel p-2.5 rounded-2xl">
+              <div className="w-full max-w-[480px] board-frame p-2.5 rounded-2xl">
                 <div className="relative">
                   <Chessboard
                     position={puzzleFen}
@@ -1500,8 +1588,8 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
                     onSquareClick={onSquareClick}
                     customArrows={arrows}
                     customSquareStyles={mergedSquareStyles}
-                    customDarkSquareStyle={{ backgroundColor: '#27272a' }}
-                    customLightSquareStyle={{ backgroundColor: '#52525b' }}
+                    customDarkSquareStyle={{ backgroundColor: activeBoardTheme.darkSquare }}
+                    customLightSquareStyle={{ backgroundColor: activeBoardTheme.lightSquare }}
                     customBoardStyle={{ borderRadius: '10px', overflow: 'hidden' }}
                   />
                   <KingStatusOverlay fen={puzzleFen} orientation={boardOrientation} />
@@ -1625,6 +1713,17 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
           setActiveTab(tab);
           setActiveView('tab');
         }}
+      />
+
+      <AppearanceSheet
+        open={appearanceOpen}
+        onClose={() => setAppearanceOpen(false)}
+        uiTheme={uiTheme}
+        onSelectUiTheme={setUiTheme}
+        boardTheme={boardThemeId}
+        onSelectBoardTheme={setBoardThemeId}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled((v) => !v)}
       />
     </div>
   );
