@@ -1,5 +1,11 @@
 import React from 'react';
-import { Home, Puzzle, Cpu, History, Users } from 'lucide-react';
+import {
+  HomeNav2D,
+  PuzzlesNav2D,
+  AnalyzeNav2D,
+  HistoryNav2D,
+  FriendsNav2D,
+} from './Icons2D';
 import type { BottomTab } from '../types/chess';
 
 interface BottomNavProps {
@@ -12,11 +18,11 @@ const ITEMS: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { id: 'home', label: 'Home', icon: Home },
-  { id: 'puzzles', label: 'Puzzles', icon: Puzzle },
-  { id: 'analyze', label: 'Analyze', icon: Cpu },
-  { id: 'history', label: 'History', icon: History },
-  { id: 'friends', label: 'Friends', icon: Users },
+  { id: 'home', label: 'Home', icon: HomeNav2D },
+  { id: 'puzzles', label: 'Puzzles', icon: PuzzlesNav2D },
+  { id: 'analyze', label: 'Analyze', icon: AnalyzeNav2D },
+  { id: 'history', label: 'History', icon: HistoryNav2D },
+  { id: 'friends', label: 'Friends', icon: FriendsNav2D },
 ];
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) => {
@@ -37,7 +43,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) 
               {isActive && (
                 <span className="accent-dot absolute top-0 w-7 h-0.5 rounded-full" />
               )}
-              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.25]' : 'stroke-[1.75]'}`} />
+              <Icon className="w-5 h-5" />
               <span className={`text-[10px] font-medium ${isActive ? 'text-zinc-100' : 'text-zinc-500'}`}>
                 {label}
               </span>

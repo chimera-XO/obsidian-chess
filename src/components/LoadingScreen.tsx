@@ -28,7 +28,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ fadingOut = false 
           className="anim-burst-rays absolute inset-0 w-full h-full pointer-events-none"
           aria-hidden="true"
         >
-          <g stroke="rgba(254, 243, 199, 0.55)" strokeWidth="1.75" strokeLinecap="round">
+          <g stroke="rgba(244, 244, 245, 0.55)" strokeWidth="1.75" strokeLinecap="round">
             <line x1="110" y1="34" x2="110" y2="52" />
             <line x1="110" y1="168" x2="110" y2="186" />
             <line x1="34" y1="110" x2="52" y2="110" />
@@ -109,12 +109,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ fadingOut = false 
             <defs>
               <linearGradient id="kingGlowGrad" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#ffffff" />
-                <stop offset="55%" stopColor="#fef3c7" />
-                <stop offset="100%" stopColor="#d4b483" />
+                <stop offset="55%" stopColor="#f4f4f5" />
+                <stop offset="100%" stopColor="#a1a1aa" />
               </linearGradient>
             </defs>
             {/* Cross */}
-            <path d="M32 6v10M27 11h10" stroke="#fef3c7" strokeWidth="3.2" strokeLinecap="round" />
+            <path d="M32 6v10M27 11h10" stroke="#f4f4f5" strokeWidth="3.2" strokeLinecap="round" />
             {/* Crown / Body */}
             <path
               d="M20 26c0-5 5.5-8 12-8s12 3 12 8c0 6-4 12-6 17H26c-2-5-6-11-6-17z"
@@ -129,14 +129,14 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ fadingOut = false 
           {/* Sparkles around the glowing King */}
           <svg
             viewBox="0 0 24 24"
-            className="anim-sparkle-1 absolute -top-2 -right-2 w-4 h-4 text-amber-100"
+            className="anim-sparkle-1 absolute -top-2 -right-2 w-4 h-4 text-zinc-100"
             fill="currentColor"
           >
             <path d="M12 0l2.8 9.2L24 12l-9.2 2.8L12 24l-2.8-9.2L0 12l9.2-2.8z" />
           </svg>
           <svg
             viewBox="0 0 24 24"
-            className="anim-sparkle-2 absolute -bottom-1 -left-2 w-3.5 h-3.5 text-amber-200"
+            className="anim-sparkle-2 absolute -bottom-1 -left-2 w-3.5 h-3.5 text-zinc-300"
             fill="currentColor"
           >
             <path d="M12 0l2.8 9.2L24 12l-9.2 2.8L12 24l-2.8-9.2L0 12l9.2-2.8z" />

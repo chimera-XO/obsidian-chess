@@ -1,21 +1,24 @@
 import React, { useMemo } from 'react';
 import {
-  Swords,
   ChevronRight,
   LogOut,
   Sparkles,
   Palette,
-  Flame,
-  Zap,
-  Timer,
-  Target,
-  Sun,
-  Moon,
-  Mic,
   TrendingUp,
   TrendingDown,
-  Award,
 } from 'lucide-react';
+import {
+  RapidIcon2D,
+  BlitzIcon2D,
+  BulletIcon2D,
+  PuzzleIcon2D,
+  StreakFlame2D,
+  RankShield2D,
+  Moon2D,
+  Sun2D,
+  PlayKnight2D,
+  Mic2D,
+} from './Icons2D';
 import { MiniBoardPreview } from './MiniBoardPreview';
 import { computePlayerProgress, getTimeGreeting } from '../utils/playerStats';
 import type { ChessPuzzle, GameHistoryEntry } from '../types/chess';
@@ -64,7 +67,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-5 pb-44 space-y-5">
-      {/* 1. Human Presence Header (Greeting + Avatar + Streak + Rank) */}
+      {/* 1. Human Presence Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative w-11 h-11 rounded-2xl glass-panel flex items-center justify-center font-display text-sm font-bold text-zinc-100 shrink-0">
@@ -74,22 +77,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-zinc-100">
               {greeting.period === 'evening' ? (
-                <Moon className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <Moon2D className="w-4 h-4 shrink-0" />
               ) : (
-                <Sun className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <Sun2D className="w-4 h-4 shrink-0" />
               )}
               <h1 className="text-sm font-semibold truncate">
                 {greeting.text}, <span className="font-bold">{username}</span>
               </h1>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-300">
-                <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-200">
+                <StreakFlame2D className="w-3.5 h-3.5" />
                 {progress.streak}d
               </span>
               <span className="text-zinc-600">·</span>
               <span className="inline-flex items-center gap-1 text-[11px] text-zinc-400">
-                <Award className="w-3 h-3 text-zinc-300" />
+                <RankShield2D className="w-3.5 h-3.5" />
                 {progress.rankTitle}
               </span>
             </div>
@@ -116,12 +119,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Illustrated Hero Carousel (Peeking Next Card) */}
+      {/* 2. Illustrated Hero Carousel */}
       <div className="-mx-4 px-4 flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar">
         {/* Hero Card 1: Next Tactical Puzzle with Live Mini-Board */}
         <div className="snap-start shrink-0 w-[86%] glass-panel rounded-3xl p-4 flex items-center justify-between gap-3.5 relative overflow-hidden">
           <div className="min-w-0 flex-1 space-y-2.5 z-10">
             <div className="flex items-center gap-1.5">
+              <PuzzleIcon2D className="w-4 h-4 shrink-0" />
               <span className="px-2 py-0.5 rounded-md bg-white/10 font-mono text-[10px] font-semibold uppercase tracking-wider text-zinc-200">
                 Puzzle
               </span>
@@ -165,7 +169,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="snap-start shrink-0 w-[82%] glass-panel rounded-3xl p-4 flex items-center justify-between gap-3 relative overflow-hidden">
           <div className="min-w-0 flex-1 space-y-2.5">
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/10 font-mono text-[10px] font-semibold uppercase tracking-wider text-zinc-200">
-              <Mic className="w-3 h-3" />
+              <Mic2D className="w-3.5 h-3.5" />
               Live Coach
             </div>
             <div>
@@ -198,7 +202,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Mode-Specific Ratings & Form Shelf */}
+      {/* 3. Mode-Specific Ratings & Form Shelf with 2D Icons */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
@@ -216,22 +220,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
         <div className="-mx-4 px-4 flex gap-2.5 overflow-x-auto no-scrollbar">
           {progress.ratings.map((r) => {
-            const meta =
+            const Icon2D =
               r.id === 'rapid'
-                ? { Icon: Timer, color: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/25' }
+                ? RapidIcon2D
                 : r.id === 'blitz'
-                ? { Icon: Zap, color: 'text-amber-400 bg-amber-500/15 border-amber-500/25' }
+                ? BlitzIcon2D
                 : r.id === 'bullet'
-                ? { Icon: Flame, color: 'text-rose-400 bg-rose-500/15 border-rose-500/25' }
-                : { Icon: Target, color: 'text-sky-400 bg-sky-500/15 border-sky-500/25' };
+                ? BulletIcon2D
+                : PuzzleIcon2D;
 
             return (
               <div
                 key={r.id}
                 className="shrink-0 w-[108px] glass-panel rounded-2xl p-3 flex flex-col items-center text-center gap-1.5"
               >
-                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center ${meta.color}`}>
-                  <meta.Icon className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-black/35 border border-white/10 flex items-center justify-center">
+                  <Icon2D className="w-6 h-6" />
                 </div>
                 <div className="flex items-baseline gap-1">
                   <span className="font-mono text-base font-bold text-zinc-100">{r.rating}</span>
@@ -324,7 +328,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             onClick={onOpenPlaySetup}
             className="btn-tactile w-full py-4 rounded-2xl font-display font-bold tracking-[0.18em] uppercase text-sm flex items-center justify-center gap-2.5"
           >
-            <Swords className="w-4 h-4" />
+            <PlayKnight2D className="w-5 h-5" />
             Play
           </button>
         </div>

@@ -140,17 +140,20 @@ function ChessWorkspace({ userId, username, onSignOut }: ChessWorkspaceProps) {
   const [uiTheme, setUiTheme] = useState<UiThemeId>(() => {
     try {
       const v = localStorage.getItem('obsidian_ui_theme');
-      return v === 'gold' ? 'gold' : 'crimson';
+      return v === 'crimson' ? 'crimson' : 'obsidian';
     } catch {
-      return 'crimson';
+      return 'obsidian';
     }
   });
   const [boardThemeId, setBoardThemeId] = useState<BoardThemeId>(() => {
     try {
-      const v = localStorage.getItem('obsidian_board_theme') as BoardThemeId | null;
-      return v || 'crimson-walnut';
+      const v = localStorage.getItem('obsidian_board_theme');
+      if (v === 'crimson-walnut' || v === 'emerald-club' || v === 'slate-steel' || v === 'obsidian') {
+        return v;
+      }
+      return 'obsidian';
     } catch {
-      return 'crimson-walnut';
+      return 'obsidian';
     }
   });
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {

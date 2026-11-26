@@ -1,5 +1,5 @@
-export type UiThemeId = 'crimson' | 'gold';
-export type BoardThemeId = 'obsidian' | 'crimson-walnut' | 'emerald-club' | 'warm-marble';
+export type UiThemeId = 'obsidian' | 'crimson';
+export type BoardThemeId = 'obsidian' | 'crimson-walnut' | 'emerald-club' | 'slate-steel';
 
 export interface UiTheme {
   id: UiThemeId;
@@ -20,20 +20,29 @@ export interface BoardTheme {
 
 export const UI_THEMES: UiTheme[] = [
   {
+    id: 'obsidian',
+    name: 'Dark Obsidian',
+    subtitle: 'Pure monochrome glass & silver trim',
+    swatch: '#27272a',
+  },
+  {
     id: 'crimson',
     name: 'Crimson Obsidian',
     subtitle: 'Dark red glass & ruby specular trim',
     swatch: '#991b1b',
   },
-  {
-    id: 'gold',
-    name: 'Grandmaster Gold',
-    subtitle: 'Matte obsidian & champagne gold',
-    swatch: '#c8a464',
-  },
 ];
 
 export const BOARD_THEMES: BoardTheme[] = [
+  {
+    id: 'obsidian',
+    name: 'Obsidian & Ash',
+    darkSquare: '#232329',
+    lightSquare: '#52525c',
+    lastMoveFrom: 'rgba(244, 244, 245, 0.16)',
+    lastMoveTo: 'rgba(244, 244, 245, 0.28)',
+    selectedSquare: 'rgba(244, 244, 245, 0.24)',
+  },
   {
     id: 'crimson-walnut',
     name: 'Crimson Walnut',
@@ -44,31 +53,22 @@ export const BOARD_THEMES: BoardTheme[] = [
     selectedSquare: 'rgba(254, 202, 202, 0.28)',
   },
   {
-    id: 'obsidian',
-    name: 'Obsidian & Ash',
-    darkSquare: '#232329',
-    lightSquare: '#52525c',
-    lastMoveFrom: 'rgba(220, 38, 38, 0.24)',
-    lastMoveTo: 'rgba(220, 38, 38, 0.38)',
-    selectedSquare: 'rgba(244, 244, 245, 0.24)',
-  },
-  {
     id: 'emerald-club',
     name: 'Emerald Club',
     darkSquare: '#1f3a2e',
     lightSquare: '#6d7f73',
-    lastMoveFrom: 'rgba(212, 180, 131, 0.28)',
-    lastMoveTo: 'rgba(212, 180, 131, 0.44)',
-    selectedSquare: 'rgba(254, 243, 199, 0.26)',
+    lastMoveFrom: 'rgba(110, 231, 183, 0.22)',
+    lastMoveTo: 'rgba(110, 231, 183, 0.36)',
+    selectedSquare: 'rgba(209, 250, 229, 0.25)',
   },
   {
-    id: 'warm-marble',
-    name: 'Warm Marble',
-    darkSquare: '#3d342c',
-    lightSquare: '#8c7d6d',
-    lastMoveFrom: 'rgba(217, 179, 108, 0.28)',
-    lastMoveTo: 'rgba(217, 179, 108, 0.45)',
-    selectedSquare: 'rgba(254, 243, 199, 0.28)',
+    id: 'slate-steel',
+    name: 'Slate Steel',
+    darkSquare: '#1e293b',
+    lightSquare: '#64748b',
+    lastMoveFrom: 'rgba(148, 163, 184, 0.28)',
+    lastMoveTo: 'rgba(226, 232, 240, 0.36)',
+    selectedSquare: 'rgba(226, 232, 240, 0.26)',
   },
 ];
 
